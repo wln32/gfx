@@ -1,6 +1,7 @@
 // Package gfx is an add-on for SDL2 that provides drawing of graphics primitives, rotozoomer, MMX image filters and framerate control.
 package gfx
 
+
 //#include <stdlib.h>
 //#include "sdl_gfx_wrapper.h"
 import "C"
@@ -44,6 +45,22 @@ func min(a ...int) int {
 	return b
 }
 
+func _getTicks()uint32 {
+
+	ticks:=sdl.GetTicks()
+	/*
+	* Since baseticks!=0 is used to track initialization
+	* we need to ensure that the tick count is always >0
+	* since SDL_GetTicks may not have incremented yet and
+	* return 0 depending on the timing of the calls.
+	 */
+	if (ticks == 0) {
+	return 1;
+	} else {
+		return ticks;
+	}
+}
+
 func gfxColor(color sdl.Color) uint32 {
 	return (uint32(color.A) << 24) | (uint32(color.B) << 16) | (uint32(color.G) << 8) | uint32(color.R)
 }
@@ -55,28 +72,45 @@ func (manager *FPSmanager) cptr() *C.FPSmanager {
 // InitFramerate initializes the framerate manager.
 // (https://www.ferzkopp.net/Software/SDL2_gfx/Docs/html/_s_d_l2__framerate_8h.html#a843f0672446aff01ef03bbcd977fbedf)
 func InitFramerate(manager *FPSmanager) {
-	C.SDL_initFramerate(manager.cptr())
+	(*manager).FrameCount = 0;
+	(*manager).Rate = FPS_DEFAULT;
+	(*manager).RateTicks = 1000.0 / float32 (FPS_DEFAULT);
+	(*manager).BaseTicks = _getTicks();
+	(*manager).LastTicks = manager.BaseTicks;
+
 }
 
 // SetFramerate sets the framerate in Hz.
 // (https://www.ferzkopp.net/Software/SDL2_gfx/Docs/html/_s_d_l2__framerate_8h.html#aa2f7f11e60d81489392707faf07c5ac5)
 func SetFramerate(manager *FPSmanager, rate uint32) bool {
-	_rate := C.Uint32(rate)
-	return C.SDL_setFramerate(manager.cptr(), _rate) == 0
+	if ((rate >= FPS_LOWER_LIMIT) && (rate <= FPS_UPPER_LIMIT)) {
+		(*manager).FrameCount = 0;
+		(*manager).Rate = rate;
+		(*manager).RateTicks = 1000.0 / float32 (rate);
+		return true
+	}
+	return false
 }
 
 // GetFramerate returns the current target framerate in Hz.
 // (https://www.ferzkopp.net/Software/SDL2_gfx/Docs/html/_s_d_l2__framerate_8h.html#aebe43457dbb9fbfec6de18e7adf49e21)
 func GetFramerate(manager *FPSmanager) (int, bool) {
-	fps := int(C.SDL_getFramerate(manager.cptr()))
-	return fps, fps >= 0
+	if (manager == nil) {
+		return 0,false;
+	}
+	return int(manager.Rate),int(manager.Rate)>=0;
+
 }
 
 // GetFramecount returns the current framecount.
 // (https://www.ferzkopp.net/Software/SDL2_gfx/Docs/html/_s_d_l2__framerate_8h.html#a41de3f516b9633f102d7ba2e85d2bb98)
 func GetFramecount(manager *FPSmanager) (int, bool) {
-	count := int(C.SDL_getFramecount(manager.cptr()))
-	return count, count >= 0
+
+	if (manager == nil) {
+		return 0,false;
+	} else {
+		return int(manager.FrameCount),manager.FrameCount>=0
+	}
 }
 
 // FramerateDelay delays execution to maintain a constant framerate and calculate fps.
@@ -104,6 +138,7 @@ func PixelRGBA(renderer *sdl.Renderer, x, y int32, r, g, b, a uint8) bool {
 	_b := C.Uint8(b)
 	_a := C.Uint8(a)
 	return C.pixelRGBA((*C.SDL_Renderer)(unsafe.Pointer(renderer)), _x, _y, _r, _g, _b, _a) == 0
+
 }
 
 // HlineColor draws horizontal line with blending.
